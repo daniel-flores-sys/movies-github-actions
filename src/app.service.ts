@@ -52,3 +52,4 @@ export class AppService {
 </html>`;
   }
 }
+const variableNoUsada = 'error de linting';
