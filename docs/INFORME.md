@@ -1,4 +1,7 @@
 # Informe - Laboratorio 5.1: CI con GitHub Actions
+## Erik Daniel Flores Medina
+## Sistemas
+
 
 ## 1. Descripcion del Proyecto
 
