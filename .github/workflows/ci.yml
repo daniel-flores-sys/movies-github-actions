@@ -34,3 +34,6 @@ jobs:
 
       - name: Ejecutar pruebas
         run: npm test
+
+      - name: Run tests with coverage
+        run: npm test -- --coverage
