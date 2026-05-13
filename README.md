@@ -2,8 +2,9 @@
 
 Puedes encontrar el informe completo con capturas de pantalla y evidencias en el siguiente enlace:
 
-- [Ver informe del laboratorio](./docs/INFORME.md)
+- [Ver informe del laboratorio 5.1](./docs/INFORME.md)
 
+- [Ver informe del laboratorio 5.2](./docs/INFORME-5.2.md)
 
 
 
