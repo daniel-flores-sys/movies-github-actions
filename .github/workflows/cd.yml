@@ -1,0 +1,156 @@
+name: CD - Build, Push and Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: movies-api
+
+jobs:
+  build-and-push:
+    name: Build, escanear y publicar imagen
+    runs-on: ubuntu-latest
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+
+    steps:
+      - name: Checkout del codigo
+        uses: actions/checkout@v6
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login a Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Generar metadata de la imagen
+        id: meta
+        run: |
+          echo "image_tag=${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "image_latest=${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+
+      - name: Build y Push de la imagen
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Escaneo de vulnerabilidades con Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  deploy-staging:
+    name: Desplegar en staging
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Desplegar contenedor en servidor de staging
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            IMAGE="${{ secrets.DOCKER_USERNAME }}/movies-api:${{ github.sha }}"
+
+            docker pull $IMAGE
+
+            docker run -d \
+              --name movies-api-new \
+              --restart unless-stopped \
+              -p 3001:3000 \
+              $IMAGE
+
+            sleep 5
+
+            if curl -sf http://localhost:3001/health; then
+              echo "Health check exitoso en staging. Activando nuevo contenedor..."
+
+              docker stop movies-api || true
+              docker rm movies-api || true
+
+              docker run -d \
+                --name movies-api \
+                --restart unless-stopped \
+                -p 80:3000 \
+                $IMAGE
+
+              docker rm -f movies-api-new || true
+            else
+              echo "Health check FALLIDO en staging. Cancelando despliegue."
+              docker logs movies-api-new || true
+              docker rm -f movies-api-new || true
+              exit 1
+            fi
+
+            docker system prune -f
+
+  deploy-production:
+    name: Desplegar en produccion
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Desplegar contenedor en servidor de produccion
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            IMAGE="${{ secrets.DOCKER_USERNAME }}/movies-api:${{ github.sha }}"
+
+            docker pull $IMAGE
+
+            docker run -d \
+              --name movies-api-new \
+              --restart unless-stopped \
+              -p 3001:3000 \
+              $IMAGE
+
+            sleep 5
+
+            if curl -sf http://localhost:3001/health; then
+              echo "Health check exitoso en produccion. Activando nuevo contenedor..."
+
+              docker stop movies-api || true
+              docker rm movies-api || true
+
+              docker run -d \
+                --name movies-api \
+                --restart unless-stopped \
+                -p 80:3000 \
+                $IMAGE
+
+              docker rm -f movies-api-new || true
+            else
+              echo "Health check FALLIDO en produccion. Cancelando despliegue."
+              docker logs movies-api-new || true
+              docker rm -f movies-api-new || true
+              exit 1
+            fi
+
+            docker system prune -f

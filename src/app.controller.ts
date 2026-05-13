@@ -12,4 +12,9 @@ export class AppController {
   getLandingPage(): string {
     return this.appService.getLandingPage();
   }
+
+  @Get('health')
+  getHealth(): { status: string; version: string } {
+    return { status: 'ok', version: '1.0.0' };
+  }
 }
