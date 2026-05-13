@@ -85,7 +85,7 @@ jobs:
 
             sleep 5
 
-            if curl -sf http://localhost:3001/health; then
+            if curl -sf http://localhost:3001/health-endpoint-inexistente; then
               echo "Health check exitoso en staging. Activando nuevo contenedor..."
 
               docker stop movies-api || true
